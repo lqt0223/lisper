@@ -5,7 +5,6 @@ basic ok!
   eval-apply metacircular model
   environment
 the implementation of undefined
-declaration hoisting: making the defined variable referable in the entire block
 separation of syntactic analysis from eval to avoid too much repeated analysis during execution
 lazy-evaluation
 repl and the loop
@@ -345,10 +344,10 @@ var _isLet = (ast) => {
 }
 
 var _letToLambdaWithArgs = (ast, env) => {
-  var firstArg = ast.args[0].proc.proc
+  var firstArg = ast.args[0].proc.args[0]
   var restArgs = ast.args[0].args
   if (restArgs && restArgs.length > 0) {
-    restArgs = restArgs.map(_ast => _ast.proc)
+    restArgs = restArgs.map(_ast => _ast.args[0])
   } else {
     restArgs = []
   }
@@ -359,8 +358,6 @@ var _letToLambdaWithArgs = (ast, env) => {
   }
 
   var lambda = _letToLambda(ast)
-  var result = new ASTNode(lambda, args)
-
   return new ASTNode(lambda, args)
 }
 
@@ -420,20 +417,27 @@ var _isSequence = (ast) => {
 }
 
 var _evalSequence = (ast, env) => {
-  // todo: scan out possible definitions. if there is more than 0 defitions, turn the expression sequence into one let function and eval
-  var output
-  ast.forEach((_ast, i) => {
-    var result = _eval(_ast, env)
-    if (i == ast.length - 1) {
-      output = result
-    }
-  })
-  return output
+  var definitions = ast.filter((_ast) => _ast.proc == 'define')
+  var nonDefinitions = ast.filter((_ast) => !(_ast.proc == 'define'))
+
+  if (definitions.length > 0) {
+    ast = _sequenceToLet(ast)
+    return _eval(ast, env)
+  } else {
+    var output
+    ast.forEach((_ast, i) => {
+      var result = _eval(_ast, env)
+      if (i == ast.length - 1) {
+        output = result
+      }
+    })
+    return output
+  }
 }
 
 var _sequenceToLet = (ast) => {
   var definitions = ast.filter(_ast => _ast.proc == 'define')
-  var otherExprs = ast.filter(_ast => !(_ast.proc == 'define'))
+  var nonDefinitions = ast.filter(_ast => !(_ast.proc == 'define'))
 
   // convert (define (proc args) body) into (define name lambda) before further conversion
   definitions = definitions.map((ast) => {
@@ -446,19 +450,16 @@ var _sequenceToLet = (ast) => {
   })
 
   var names = definitions.map(_ast => _ast.args[0])
-  var values = definitions.map(_ast => _ast.args.slice(1))
+  var values = definitions.map(_ast => _ast.args[1])
 
-  var bindingNodes = names.map(name => new ASTNode(name, 'undefined'))
+  var bindingNodes = names.map(name => new ASTNode(name, ['undefined']))
   var firstBinding = bindingNodes.shift()
   var bindingPart = new ASTNode(firstBinding, bindingNodes)
 
   var setPart = names.map((name, i) => new ASTNode('set!', [name, values[i]]))
-  var letBody = setPart.concat(otherExprs)
-
+  var letBody = setPart.concat(nonDefinitions)
   var params = [bindingPart].concat(letBody)
 
-  var result = new ASTNode('let', params)
-  // todo: make sure the conversion sequence with definition => let => lambda is correct
   return new ASTNode('let', params)
 }
 
