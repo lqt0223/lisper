@@ -29,6 +29,13 @@ class Frame {
   }
 }
 
+class Pair {
+  constructor(head, tail) {
+    this.head = head
+    this.tail = tail
+  }
+}
+
 class Environment {
   constructor(env, frame) {
     this.frame = frame
@@ -135,10 +142,10 @@ var lisp_eval = (code) => {
 }
 
 // primitive implementations
-var theEmptyList = []
-var cons = (a, b) => [a, b]
-var car = (a) => a[0]
-var cdr = (a) => a[1]
+var theEmptyList = new Pair(null, null)
+var cons = (a, b) => new Pair(a, b)
+var car = (a) => a.head
+var cdr = (a) => a.tail
 var list = (...elements) => {
   if (elements.length == 0) {
     return theEmptyList
@@ -162,7 +169,7 @@ const PRIMITIVES_PROCEDURES = {
   'and': (a, b) => a && b,
   'or': (a, b) => a || b,
   'not': (a) => !a,
-  'null?': (a) => Array.isArray(a) && a.length == 0,
+  'null?': (a) => a && a.constructor && a.constructor.name == 'Pair' && a.head == null && a.tail == null,
   'cons': cons,
   'car': car,
   'cdr': cdr,
@@ -204,7 +211,7 @@ var _eval = (ast, env) => {
     return _evalBegin(ast, env)
   } else if (_isApply(ast)) {
     var proc = _eval(ast.args[0], env)
-    var args = _flatten(_eval(ast.args[1], env))
+    var args = _listToArr(_eval(ast.args[1], env))
     return _apply(proc, args)
   // if its a procedure (a non-special expression)
   // evaluate its operator(proc) and operands(args), and do the application
@@ -285,16 +292,20 @@ var _evalString = (ast) => {
   return ast.slice(1)
 }
 
-// return the flattened array (a one-dimensionalized array with any extra nesting removed)
-var _flatten = (arr) => {
-  return arr.reduce((a, b) => {
-    if (Array.isArray(b)) {
-      return a.concat(_flatten(b))
-    } else {
-      a.push(b)
-      return a
-    }
-  }, [])
+// transform list (nested-pair) into an one-dimensional array
+var _listToArr = (list) => {
+  var arr = []
+  var result =  __listToArr(list, arr)
+  return result
+}
+
+var __listToArr = (list, arr) => {
+  if (list.head == null && list.tail == null) {
+    return arr
+  } else {
+    arr.push(list.head)
+    return __listToArr(list.tail, arr)
+  }
 }
 
 var _evalPrimitive = (ast) => {
@@ -528,7 +539,8 @@ var code = `
 (define (factorial n)
   (define (mult a b) (* a b))
   (define seq (enum 1 n))
-  (reduce mult 1 seq))
+  (define args (list mult 1 seq))
+  (apply reduce args))
 
 (factorial 6)
 `
