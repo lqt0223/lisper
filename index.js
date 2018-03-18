@@ -323,14 +323,14 @@ var _evalDefine = (ast, env) => {
     ast = _defineProcToDefine(ast)
     name = ast.args[0]
   }
-  var value = _eval(ast.args.slice(1), env)
+  var value = _eval(ast.args[1], env)
   env.defineVariable(name, value)
   return 'define ok!'
 }
 
 var _defineProcToDefine = (ast) => {
   var procName = ast.args[0].proc
-  var procParams = ast.args[0].args.slice(0)
+  var procParams = ast.args[0].args
   var procBody = ast.args.slice(1)
 
   var firstParam = procParams.shift()
@@ -345,7 +345,7 @@ var _isAssign = (ast) => {
 
 var _evalAssign = (ast, env) => {
   var name = ast.args[0]
-  var value = _eval(ast.args.slice(1), env)
+  var value = _eval(ast.args[1], env)
   env.set(name ,value)
   return `set ${name} ${value} ok!`
 }
