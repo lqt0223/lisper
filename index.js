@@ -204,7 +204,7 @@ var _eval = (ast, env) => {
   } else if (_isCond(ast)) {
     return _eval(_condToIf(ast), env)
   } else if (_isLambda(ast)) {
-    return _makeLambda(ast, env)
+    return _makeProcedure(ast, env)
   } else if (_isSequence(ast)) {
     return _evalSequence(ast, env)
   } else if (_isBegin(ast)) {
@@ -491,7 +491,7 @@ var _isLambda = (ast) => {
   return ast.proc == 'lambda'
 }
 
-var _makeLambda = (ast, env) => {
+var _makeProcedure = (ast, env) => {
   var params = ast.args[0]
   params = _astToArray(params)
   var body = ast.args.slice(1)
