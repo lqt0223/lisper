@@ -5,7 +5,6 @@ basic ok!
   eval-apply metacircular model
   environment
 the implementation of undefined
-separation of syntactic analysis from eval to avoid too much repeated analysis during execution
 lazy-evaluation
 repl and the loop
 */
@@ -185,40 +184,48 @@ var _lisp_eval = (ast, env) => {
   return _eval(ast, env)
 }
 
-// evaluate a subexpression in a given environment
+// to evaluate, analyze the expression to form a expression ready to be executed, and execute in a given environment
 var _eval = (ast, env) => {
+  return _analyze(ast)(env)
+}
+
+var _analyze = (ast) => {
   if (_isNumber(ast)) {
-    return _evalNumber(ast)
+    return _analyzeNumber(ast)
   } else if (_isString(ast)) {
-    return _evalString(ast)
+    return _analyzeString(ast)
   } else if (_isVariable(ast)) {
-    return _lookUp(ast, env)
+    return _analyzeVariable(ast)
   } else if (_isAssign(ast)) {
-    return _evalAssign(ast, env)
+    return _analyzeAssign(ast)
   } else if (_isDefine(ast)) {
-    return _evalDefine(ast, env)
+    return _analyzeDefine(ast)
   } else if (_isLet(ast)) {
-    return _eval(_letToLambdaWithArgs(ast), env)
+    return _analyze(_letToLambdaWithArgs(ast))
   } else if (_isIf(ast)) {
-    return _evalIf(ast, env)
+    return _analyzeIf(ast)
   } else if (_isCond(ast)) {
-    return _eval(_condToIf(ast), env)
+    return _analyze(_condToIf(ast))
   } else if (_isLambda(ast)) {
-    return _makeProcedure(ast, env)
+    return _analyzeLambda(ast)
   } else if (_isSequence(ast)) {
-    return _evalSequence(ast, env)
+    return _analyzeSequence(ast)
   } else if (_isBegin(ast)) {
-    return _evalBegin(ast, env)
+    return _analyzeBegin(ast)
   } else if (_isApply(ast)) {
-    var proc = _eval(ast.args[0], env)
-    var args = _listToArr(_eval(ast.args[1], env))
-    return _apply(proc, args)
+    var proc = _analyze(ast.args[0])
+    var args = _analyze(ast.args[1])
+    return (env) => {
+      return _apply(proc(env), _listToArr(args(env)))
+    }
   // if its a procedure (a non-special expression)
   // evaluate its operator(proc) and operands(args), and do the application
   } else if (_isProcedure(ast)){
-    var proc = _eval(ast.proc, env)
-    var args = ast.args.map((arg) => _eval(arg, env))
-    return _apply(proc, args)
+    var proc = _analyze(ast.proc)
+    var args = ast.args.map((arg) => _analyze(arg))
+    return (env) => {
+      return _apply(proc(env), args.map(arg => arg(env)))
+    }
   } else {
     throw `Unknown expression ${lisp_stringify(ast)}`
   }
@@ -230,6 +237,12 @@ var _isVariable = (ast) => {
 
 var _lookUp = (ast, env) => {
   return env.get(ast)
+}
+
+var _analyzeVariable = (ast) => {
+  return (env) => {
+    return _lookUp(ast, env)
+  }
 }
 
 var _isProcedure = (ast) => {
@@ -245,9 +258,9 @@ var _isApply = (ast) => {
 }
 
 // apply a procedure: if it's primitive, apply directly
-// else, because the body of the procedure is an expression to be evaluated
-// we extend the environment of the procedure by creating bindings between formal parameters and actual arguments
-// and evaluate the body in the extended new environment
+// else, extend the environment of the procedure by creating bindings between formal parameters and actual arguments
+// then analyze the procedure body to form a procedure ready to be executed
+// finally execute it within the new environment
 var _apply = (proc, args) => {
   if (_isPrimitive(proc)) {
     return _applyPrimitive(proc, args)
@@ -255,7 +268,7 @@ var _apply = (proc, args) => {
     var bindings = _bind(proc.params, args)
     var frame = new Frame(bindings)
     var newEnv = proc.env.extend(frame)
-    return _eval(proc.body, newEnv)
+    return _analyze(proc.body)(newEnv)
   }
 }
 
@@ -284,12 +297,24 @@ var _evalNumber = (ast) => {
   return parseInt(ast)
 }
 
+var _analyzeNumber = (ast) => {
+  return (env) => {
+    return parseInt(ast)
+  }
+}
+
 var _isString = (ast) => {
   return ast[0] == '`'
 }
 
 var _evalString = (ast) => {
   return ast.slice(1)
+}
+
+var _analyzeString = (ast) => {
+  return (env) => {
+    return ast.slice(1)
+  }
 }
 
 // transform list (nested-pair) into an one-dimensional array
@@ -328,6 +353,20 @@ var _evalDefine = (ast, env) => {
   return 'define ok!'
 }
 
+var _analyzeDefine = (ast) => {
+  var name = ast.args[0]
+  // to support the (define (procName procParams) (procBody)) syntatic sugar
+  if (_isProcedure(name)) {
+    ast = _defineProcToDefine(ast)
+    name = ast.args[0]
+  }
+  var value = _analyze(ast.args[1])
+  return (env) => {
+    env.defineVariable(name, value(env))
+    return 'define ok'
+  }
+}
+
 var _defineProcToDefine = (ast) => {
   var procName = ast.args[0].proc
   var procParams = ast.args[0].args
@@ -346,8 +385,17 @@ var _isAssign = (ast) => {
 var _evalAssign = (ast, env) => {
   var name = ast.args[0]
   var value = _eval(ast.args[1], env)
-  env.set(name ,value)
+  env.set(name, value)
   return `set ${name} ${value} ok!`
+}
+
+var _analyzeAssign = (ast) => {
+  var name = ast.args[0]
+  var value = _analyze(ast.args[1])
+  return (env) => {
+    env.set(name, value(env))
+    return `set ${name} ${value(env)} ok!`
+  }
 }
 
 var _isLet = (ast) => {
@@ -391,6 +439,19 @@ var _evalIf = (ast, env) => {
     return _eval(ast.args[1], env)
   } else {
     return _eval(ast.args[2], env)
+  }
+}
+
+var _analyzeIf = (ast) => {
+  var pred = _analyze(ast.args[0])
+  var thenAction = _analyze(ast.args[1])
+  var elseAction = _analyze(ast.args[2])
+  return (env) => {
+    if (pred(env)) {
+      return thenAction(env)
+    } else {
+      return elseAction(env)
+    }
   }
 }
 
@@ -446,6 +507,27 @@ var _evalSequence = (ast, env) => {
   }
 }
 
+var _analyzeSequence = (ast) => {
+  var definitions = ast.filter((_ast) => _ast.proc == 'define')
+  var nonDefinitions = ast.filter((_ast) => !(_ast.proc == 'define'))
+
+  if (definitions.length > 0) {
+    ast = _sequenceToLet(ast)
+    return (env) => {
+      return _analyze(ast)(env)
+    }
+  } else {
+    var output
+    var analyzedSequence = ast.map(_analyze)
+    return (env) => {
+      analyzedSequence.forEach((analyzed) => {
+        output = analyzed(env)
+      })
+      return output
+    }
+  }
+}
+
 var _sequenceToLet = (ast) => {
   var definitions = ast.filter(_ast => _ast.proc == 'define')
   var nonDefinitions = ast.filter(_ast => !(_ast.proc == 'define'))
@@ -483,12 +565,23 @@ var _evalBegin = (ast, env) => {
   return _evalSequence(sequence, env)
 }
 
+var _analyzeBegin = (ast) => {
+  var sequence = ast.args
+  return _analyzeSequence(sequence)
+}
+
 var _sequenceToBegin = (ast) => {
   return new ASTNode('begin', ast)
 }
 
 var _isLambda = (ast) => {
   return ast.proc == 'lambda'
+}
+
+var _analyzeLambda = (ast) => {
+  return (env) => {
+    return _makeProcedure(ast, env)
+  }
 }
 
 var _makeProcedure = (ast, env) => {
