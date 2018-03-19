@@ -175,7 +175,7 @@ const PRIMITIVES_PROCEDURES = {
   'list': list,
 }
 
-for(var name in PRIMITIVES_PROCEDURES) {
+for (var name in PRIMITIVES_PROCEDURES) {
   var proc = PRIMITIVES_PROCEDURES[name]
   proc.isPrimitive = true
 }
@@ -293,10 +293,6 @@ var _isNumber = (ast) => {
   return /^[0-9]+$/.test(ast)
 }
 
-var _evalNumber = (ast) => {
-  return parseInt(ast)
-}
-
 var _analyzeNumber = (ast) => {
   return (env) => {
     return parseInt(ast)
@@ -305,10 +301,6 @@ var _analyzeNumber = (ast) => {
 
 var _isString = (ast) => {
   return ast[0] == '`'
-}
-
-var _evalString = (ast) => {
-  return ast.slice(1)
 }
 
 var _analyzeString = (ast) => {
@@ -333,24 +325,8 @@ var __listToArr = (list, arr) => {
   }
 }
 
-var _evalPrimitive = (ast) => {
-  return PRIMITIVES_PROCEDURES[ast]
-}
-
 var _isDefine = (ast) => {
   return ast.proc == 'define'
-}
-
-var _evalDefine = (ast, env) => {
-  var name = ast.args[0]
-  // to support the (define (procName procParams) (procBody)) syntatic sugar
-  if (_isProcedure(name)) {
-    ast = _defineProcToDefine(ast)
-    name = ast.args[0]
-  }
-  var value = _eval(ast.args[1], env)
-  env.defineVariable(name, value)
-  return 'define ok!'
 }
 
 var _analyzeDefine = (ast) => {
@@ -380,13 +356,6 @@ var _defineProcToDefine = (ast) => {
 
 var _isAssign = (ast) => {
   return ast.proc == 'set!'
-}
-
-var _evalAssign = (ast, env) => {
-  var name = ast.args[0]
-  var value = _eval(ast.args[1], env)
-  env.set(name, value)
-  return `set ${name} ${value} ok!`
 }
 
 var _analyzeAssign = (ast) => {
@@ -488,25 +457,6 @@ var _isSequence = (ast) => {
   return Array.isArray(ast) && ast.length > 0
 }
 
-var _evalSequence = (ast, env) => {
-  var definitions = ast.filter((_ast) => _ast.proc == 'define')
-  var nonDefinitions = ast.filter((_ast) => !(_ast.proc == 'define'))
-
-  if (definitions.length > 0) {
-    ast = _sequenceToLet(ast)
-    return _eval(ast, env)
-  } else {
-    var output
-    ast.forEach((_ast, i) => {
-      var result = _eval(_ast, env)
-      if (i == ast.length - 1) {
-        output = result
-      }
-    })
-    return output
-  }
-}
-
 var _analyzeSequence = (ast) => {
   var definitions = ast.filter((_ast) => _ast.proc == 'define')
   var nonDefinitions = ast.filter((_ast) => !(_ast.proc == 'define'))
@@ -558,11 +508,6 @@ var _sequenceToLet = (ast) => {
 
 var _isBegin = (ast) => {
   return ast.proc == 'begin'
-}
-
-var _evalBegin = (ast, env) => {
-  var sequence = ast.args
-  return _evalSequence(sequence, env)
 }
 
 var _analyzeBegin = (ast) => {
