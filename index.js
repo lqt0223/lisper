@@ -17,6 +17,63 @@ class ASTNode {
   }
 }
 
+class Pair {
+  constructor(head, tail) {
+    this.head = head
+    this.tail = tail
+  }
+}
+
+class Thunk {
+  constructor(ast, env) {
+    this.ast = ast
+    this.env = env
+    this.value = undefined
+    this.forced = false
+  }
+
+  static delay(ast, env) {
+    return new Thunk(ast, env)
+  }
+
+  static force(thunk) {
+    // force the thunk with memoization
+    if (thunk.forced) {
+      return thunk.value
+    } else {
+      thunk.value = _eval(thunk.ast, thunk.env)
+      delete thunk.ast
+      delete thunk.env
+      thunk.forced = true
+      return thunk.value
+    }
+  }
+
+  static isThunk(obj) {
+    return obj && obj.constructor && obj.constructor.name == 'Thunk'
+  }
+}
+
+var _delay = (ast, env) => {
+  return Thunk.delay(ast, env)
+}
+
+var _force = (obj) => {
+  if (Thunk.isThunk(obj)) {
+    return __force(obj)
+  } else {
+    return obj
+  }
+}
+
+var __force = (obj) => {
+  if (Thunk.isThunk(obj)) {
+    return __force(Thunk.force(obj))
+  } else {
+    return obj
+  }
+}
+
 class Frame {
   constructor(bindings) {
     this.bindings = bindings || {}
@@ -26,13 +83,6 @@ class Frame {
   }
   get(name) {
     return this.bindings[name]
-  }
-}
-
-class Pair {
-  constructor(head, tail) {
-    this.head = head
-    this.tail = tail
   }
 }
 
@@ -182,7 +232,7 @@ for(var name in PRIMITIVES_PROCEDURES) {
 }
 
 var _lisp_eval = (ast, env) => {
-  return _eval(ast, env)
+  return _force(_eval(ast, env))
 }
 
 // evaluate a subexpression in a given environment
@@ -210,15 +260,15 @@ var _eval = (ast, env) => {
   } else if (_isBegin(ast)) {
     return _evalBegin(ast, env)
   } else if (_isApply(ast)) {
-    var proc = _eval(ast.args[0], env)
+    var proc = _force(_eval(ast.args[0], env))
     var args = _listToArr(_eval(ast.args[1], env))
-    return _apply(proc, args)
+    return _apply(proc, args, env)
   // if its a procedure (a non-special expression)
   // evaluate its operator(proc) and operands(args), and do the application
   } else if (_isProcedure(ast)){
-    var proc = _eval(ast.proc, env)
-    var args = ast.args.map((arg) => _eval(arg, env))
-    return _apply(proc, args)
+    var proc = _force(_eval(ast.proc, env))
+    var args = ast.args
+    return _apply(proc, args, env)
   } else {
     throw `Unknown expression ${lisp_stringify(ast)}`
   }
@@ -248,10 +298,16 @@ var _isApply = (ast) => {
 // else, because the body of the procedure is an expression to be evaluated
 // we extend the environment of the procedure by creating bindings between formal parameters and actual arguments
 // and evaluate the body in the extended new environment
-var _apply = (proc, args) => {
+var _apply = (proc, args, env) => {
   if (_isPrimitive(proc)) {
+    args = args.map((arg) => {
+      return _eval(arg, env)
+    }).map(_force)
     return _applyPrimitive(proc, args)
   } else {
+    args = args.map((arg) => {
+      return _delay(arg, env)
+    })
     var bindings = _bind(proc.params, args)
     var frame = new Frame(bindings)
     var newEnv = proc.env.extend(frame)
@@ -386,7 +442,7 @@ var _isIf = (ast) => {
 }
 
 var _evalIf = (ast, env) => {
-  var predResult = _eval(ast.args[0], env)
+  var predResult = _force(_eval(ast.args[0], env))
   if (predResult) {
     return _eval(ast.args[1], env)
   } else {
@@ -540,7 +596,7 @@ var code = `
   (define (mult a b) (* a b))
   (define seq (enum 1 n))
   (define args (list mult 1 seq))
-  (apply reduce args))
+  (reduce mult 1 seq))
 
 (factorial 6)
 `
