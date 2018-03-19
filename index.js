@@ -157,6 +157,7 @@ var lisp_parse = (code) => {
 // format the source code for better tokenizing
 var lisp_beautify = (code) => {
   return code
+  .replace(/\s?;;.*\n/g, '') // remove comment lines
   .replace(/\n/g, ' ') // replace line-breaks with spaces
   .replace(/\(/g, ' ( ') // append one space into each side of a left parenthesis
   .replace(/\)/g, ' ) ') // append one space into each side of a right parenthesis
