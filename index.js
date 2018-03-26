@@ -290,12 +290,16 @@ var _applyPrimitive = (proc, args) => {
 }
 
 var _isNumber = (ast) => {
-  return /^[0-9]+$/.test(ast)
+  return /^[0-9.]+$/.test(ast) && ast.split('.').length <= 2
 }
 
 var _analyzeNumber = (ast) => {
   return (env) => {
-    return parseInt(ast)
+    if (ast.split('.').length == 2) {
+      return parseFloat(ast)
+    } else {
+      return parseInt(ast)
+    }
   }
 }
 
