@@ -453,10 +453,6 @@ var __condToIf = (predicates, actions) => {
   }
 }
 
-var _makeIf = (pred, thenAction, elseAction) => {
-  return new ASTNode('if', [pred, thenAction, elseAction])
-}
-
 var _isSequence = (ast) => {
   return Array.isArray(ast) && ast.length > 0
 }
